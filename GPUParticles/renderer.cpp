@@ -1,5 +1,12 @@
+// DX includes.
 #include <d3d11.h>
 #include <DirectXMath.h>
+
+// COM pointers handling.
+#include <wrl.h>
+
+// C++ includes.
+#include <memory>
 
 // Linking DX Libraries.
 #pragma comment(lib, "d3d11.lib")
@@ -19,46 +26,42 @@ bool GetAdapterInfo(unsigned int screenWidth, unsigned int screenHeight, Adapter
         return false;
 
     HRESULT result;
-    IDXGIFactory* pDXGIFactory;
-    IDXGIAdapter* pDXGIAdapter;
-    IDXGIOutput* pDXGIOutput;
+    Microsoft::WRL::ComPtr<IDXGIFactory> pDXGIFactory;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> pDXGIAdapter;
+    Microsoft::WRL::ComPtr<IDXGIOutput> pDXGIOutput;
+
+    result = CreateDXGIFactory(__uuidof(pDXGIFactory), (void**)pDXGIFactory.GetAddressOf());
+    if (FAILED(result))
+        return false;
+
+    result = pDXGIFactory->EnumAdapters(0, pDXGIAdapter.GetAddressOf());
+    if (FAILED(result))
+        return false;
+
+    result = pDXGIAdapter->EnumOutputs(0, pDXGIOutput.GetAddressOf());
+    if (FAILED(result))
+        return false;
 
     UINT modeCnt;
-    DXGI_MODE_DESC* pDXGIModeArray;
-
-    // TODO: Fix memory leaks in COM-objects.
-
-    result = CreateDXGIFactory(__uuidof(pDXGIFactory), (void**)&pDXGIFactory);
-    if (FAILED(result))
-        return false;
-
-    result = pDXGIFactory->EnumAdapters(0, &pDXGIAdapter);
-    if (FAILED(result))
-        return false;
-
-    result = pDXGIAdapter->EnumOutputs(0, &pDXGIOutput);
-    if (FAILED(result))
-        return false;
-
     result = pDXGIOutput->GetDisplayModeList(
             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &modeCnt, NULL);
     if (FAILED(result))
         return false;
 
-    pDXGIModeArray = new DXGI_MODE_DESC[modeCnt];
+    std::unique_ptr<DXGI_MODE_DESC[]> rDXGIModeArray(new DXGI_MODE_DESC[modeCnt]);
     result = pDXGIOutput->GetDisplayModeList(
-            DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &modeCnt, pDXGIModeArray);
+            DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &modeCnt, rDXGIModeArray.get());
 
     if (FAILED(result))
         return false;
 
     for (UINT modeIdx = 0; modeIdx < modeCnt; ++modeIdx)
     {
-        if (pDXGIModeArray[modeIdx].Width == screenWidth &&
-            pDXGIModeArray[modeIdx].Height == screenHeight)
+        if (rDXGIModeArray[modeIdx].Width == screenWidth &&
+            rDXGIModeArray[modeIdx].Height == screenHeight)
         {
-            pAdapterInfo->m_den = pDXGIModeArray[modeIdx].RefreshRate.Denominator;
-            pAdapterInfo->m_num = pDXGIModeArray[modeIdx].RefreshRate.Numerator;
+            pAdapterInfo->m_den = rDXGIModeArray[modeIdx].RefreshRate.Denominator;
+            pAdapterInfo->m_num = rDXGIModeArray[modeIdx].RefreshRate.Numerator;
         }
     }
     
@@ -68,11 +71,6 @@ bool GetAdapterInfo(unsigned int screenWidth, unsigned int screenHeight, Adapter
         return false;
 
     pAdapterInfo->m_videoMemoryMB = adapterDesc.DedicatedVideoMemory / 1024 / 1024;
-    
-    delete[] pDXGIModeArray;
-    pDXGIOutput->Release();
-    pDXGIAdapter->Release();
-    pDXGIFactory->Release();
 
     return true;
 }
