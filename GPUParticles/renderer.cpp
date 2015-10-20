@@ -14,9 +14,9 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-bool GetAdapterInfo(const RenderWindow& renderWindow, AdapterInfo* pAdapterInfo)
+bool GetRefreshRate(const RenderWindow& renderWindow, RefreshRate* pRefreshRate)
 {
-    if (pAdapterInfo == NULL)
+    if (pRefreshRate == NULL)
         return false;
 
     HRESULT result;
@@ -54,8 +54,8 @@ bool GetAdapterInfo(const RenderWindow& renderWindow, AdapterInfo* pAdapterInfo)
         if (rDXGIModeArray[modeIdx].Width == renderWindow.m_screenWidth &&
             rDXGIModeArray[modeIdx].Height == renderWindow.m_screenHeight)
         {
-            pAdapterInfo->m_den = rDXGIModeArray[modeIdx].RefreshRate.Denominator;
-            pAdapterInfo->m_num = rDXGIModeArray[modeIdx].RefreshRate.Numerator;
+            pRefreshRate->m_den = rDXGIModeArray[modeIdx].RefreshRate.Denominator;
+            pRefreshRate->m_num = rDXGIModeArray[modeIdx].RefreshRate.Numerator;
         }
     }
     
@@ -64,16 +64,12 @@ bool GetAdapterInfo(const RenderWindow& renderWindow, AdapterInfo* pAdapterInfo)
     if (FAILED(result))
         return false;
 
-    pAdapterInfo->m_videoMemoryMB = adapterDesc.DedicatedVideoMemory / 1024 / 1024;
-
     return true;
 }
 
-void InitializeRenderer(const RenderWindow& renderWindow)
+Renderer InitializeRenderer(const RenderWindow& renderWindow)
 {
-    AdapterInfo adapterInfo;
-    if (!GetAdapterInfo(renderWindow, &adapterInfo))
-        return;
+    Renderer renderer;
 
     HRESULT result;
     DXGI_SWAP_CHAIN_DESC swapChainDesc;
@@ -92,10 +88,11 @@ void InitializeRenderer(const RenderWindow& renderWindow)
     swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     // Set the refresh rate of the back buffer.
-    if (renderWindow.m_verticalSync)
+    RefreshRate refreshRate;
+    if (renderWindow.m_verticalSync && GetRefreshRate(renderWindow, &refreshRate))
     {
-        swapChainDesc.BufferDesc.RefreshRate.Numerator = adapterInfo.m_num;
-        swapChainDesc.BufferDesc.RefreshRate.Denominator = adapterInfo.m_den;
+        swapChainDesc.BufferDesc.RefreshRate.Numerator = refreshRate.m_num;
+        swapChainDesc.BufferDesc.RefreshRate.Denominator = refreshRate.m_den;
     }
     else
     {
@@ -127,7 +124,6 @@ void InitializeRenderer(const RenderWindow& renderWindow)
 
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_0 };
 
-    Renderer renderer;
 
     // Create the swap chain, Direct3D device, and Direct3D device context.
     result = D3D11CreateDeviceAndSwapChain(
@@ -139,6 +135,86 @@ void InitializeRenderer(const RenderWindow& renderWindow)
 
     if (FAILED(result))
     {
-        return;
+        return renderer;
     }
+
+    // Get back buffer from swap chain.
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> rBackBuffer;
+    result = renderer.m_rSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)rBackBuffer.GetAddressOf());
+
+    if (FAILED(result))
+    {
+        return renderer;
+    }
+
+    result = renderer.m_rDevice->CreateRenderTargetView(
+            rBackBuffer.Get(), NULL, renderer.m_rRenderTargetView.GetAddressOf());
+
+    if (FAILED(result))
+    {
+        return renderer;
+    }
+    
+    // Building depth target.
+    D3D11_TEXTURE2D_DESC depthBufferDesc;
+    ZeroMemory(&depthBufferDesc, sizeof(depthBufferDesc));
+    depthBufferDesc.Width = renderWindow.m_screenWidth;
+    depthBufferDesc.Height = renderWindow.m_screenHeight;
+    depthBufferDesc.MipLevels = 1;
+    depthBufferDesc.ArraySize = 1;
+    depthBufferDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthBufferDesc.SampleDesc.Count = 1;
+    depthBufferDesc.SampleDesc.Quality = 0;
+    depthBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    depthBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    depthBufferDesc.CPUAccessFlags = 0;
+    depthBufferDesc.MiscFlags = 0;
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> rDepthStencilBuffer;
+    result = renderer.m_rDevice->CreateTexture2D(&depthBufferDesc, NULL, rDepthStencilBuffer.GetAddressOf());
+    if (FAILED(result))
+    {
+        return renderer;
+    }
+
+    // Initialize the depth stencil view.
+    D3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc;
+    ZeroMemory(&depthStencilViewDesc, sizeof(depthStencilViewDesc));
+
+    // Set up the depth stencil view description.
+    depthStencilViewDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthStencilViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    depthStencilViewDesc.Texture2D.MipSlice = 0;
+
+    // Create the depth stencil view.
+    result = renderer.m_rDevice->CreateDepthStencilView(
+            rDepthStencilBuffer.Get(), &depthStencilViewDesc, renderer.m_rDepthStencilView.GetAddressOf());
+    if (FAILED(result))
+    {
+        return renderer;
+    }
+
+    // Bind render and depth targets.
+    renderer.m_rDeviceContext->OMSetRenderTargets(
+            1, renderer.m_rRenderTargetView.GetAddressOf(), renderer.m_rDepthStencilView.Get());
+
+    return renderer;
+}
+
+void ClearBuffers(Renderer* pRenderer)
+{
+    // Clear the back buffer.
+    float color[4] = { 1.0f, 0.3f, 0.7f, 1.0f };
+    pRenderer->m_rDeviceContext->ClearRenderTargetView(pRenderer->m_rRenderTargetView.Get(), color);
+
+    // Clear the depth buffer.
+    pRenderer->m_rDeviceContext->ClearDepthStencilView(pRenderer->m_rDepthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+}
+
+void Present(Renderer* pRenderer, const RenderWindow& renderWindow)
+{
+    if (renderWindow.m_verticalSync)
+        pRenderer->m_rSwapChain->Present(1, 0);
+    else
+        pRenderer->m_rSwapChain->Present(0, 0);
 }

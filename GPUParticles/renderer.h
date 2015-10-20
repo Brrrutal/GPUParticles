@@ -14,11 +14,10 @@ struct RenderWindow
     HWND m_windowHandle;
 };
 
-struct AdapterInfo
+struct RefreshRate
 {
     unsigned int m_den;
     unsigned int m_num;
-    unsigned long long m_videoMemoryMB;
 };
 
 struct Renderer
@@ -26,4 +25,11 @@ struct Renderer
     Microsoft::WRL::ComPtr<ID3D11Device> m_rDevice;
     Microsoft::WRL::ComPtr<IDXGISwapChain> m_rSwapChain;
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_rDeviceContext;
+
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> m_rRenderTargetView;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> m_rDepthStencilView;
 };
+
+Renderer InitializeRenderer(const RenderWindow& renderWindow);
+void ClearBuffers(Renderer* pRenderer);
+void Present(Renderer* pRenderer, const RenderWindow& renderWindow);

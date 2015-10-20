@@ -152,7 +152,7 @@ void ShutdownApp(App* pApp)
 }
 
 // Main application loop.
-void RunLoop()
+void RunLoop(Renderer* pRenderer, const RenderWindow& renderWindow)
 {
     MSG msg;
 
@@ -177,11 +177,8 @@ void RunLoop()
         else
         {
             // Otherwise do the frame processing.
-            // TODO: Rendering here.
-            if (false)
-            {
-                return;
-            }
+            ClearBuffers(pRenderer);
+            Present(pRenderer, renderWindow);
         }
 
     }
@@ -190,7 +187,8 @@ void RunLoop()
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR pCmdLine, int cmdShow)
 {
     App app = InitializeApp(false);
-    RunLoop();
+    Renderer renderer = InitializeRenderer(app.m_renderWindow);
+    RunLoop(&renderer, app.m_renderWindow);
     ShutdownApp(&app);
 	return 0;
 }
