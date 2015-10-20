@@ -145,6 +145,9 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="renderer.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="renderer.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

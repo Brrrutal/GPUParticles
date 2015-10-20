@@ -10,4 +10,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="renderer.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="renderer.h" />
+  </ItemGroup>
 </Project>
