@@ -190,5 +190,5 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR pCmdLine, 
     Renderer renderer = InitializeRenderer(app.m_renderWindow);
     RunLoop(&renderer, app.m_renderWindow);
     ShutdownApp(&app);
-	return 0;
+    return 0;
 }

@@ -14,12 +14,6 @@ struct RenderWindow
     HWND m_windowHandle;
 };
 
-struct RefreshRate
-{
-    unsigned int m_den;
-    unsigned int m_num;
-};
-
 struct Renderer
 {
     Microsoft::WRL::ComPtr<ID3D11Device> m_rDevice;

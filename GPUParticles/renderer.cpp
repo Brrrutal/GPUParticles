@@ -14,10 +14,15 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-bool GetRefreshRate(const RenderWindow& renderWindow, RefreshRate* pRefreshRate)
+struct RefreshRate
 {
-    if (pRefreshRate == NULL)
-        return false;
+    unsigned int m_den = 1;
+    unsigned int m_num = 0;
+};
+
+RefreshRate GetRefreshRate(const RenderWindow& renderWindow)
+{
+    RefreshRate refreshRate;
 
     HRESULT result;
     Microsoft::WRL::ComPtr<IDXGIFactory> pDXGIFactory;
@@ -26,45 +31,45 @@ bool GetRefreshRate(const RenderWindow& renderWindow, RefreshRate* pRefreshRate)
 
     result = CreateDXGIFactory(__uuidof(pDXGIFactory), (void**)pDXGIFactory.GetAddressOf());
     if (FAILED(result))
-        return false;
+        return refreshRate;
 
     result = pDXGIFactory->EnumAdapters(0, pDXGIAdapter.GetAddressOf());
     if (FAILED(result))
-        return false;
+        return refreshRate;
 
     result = pDXGIAdapter->EnumOutputs(0, pDXGIOutput.GetAddressOf());
     if (FAILED(result))
-        return false;
+        return refreshRate;
 
     UINT modeCnt;
     result = pDXGIOutput->GetDisplayModeList(
             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &modeCnt, NULL);
     if (FAILED(result))
-        return false;
+        return refreshRate;
 
     std::unique_ptr<DXGI_MODE_DESC[]> rDXGIModeArray(new DXGI_MODE_DESC[modeCnt]);
     result = pDXGIOutput->GetDisplayModeList(
             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &modeCnt, rDXGIModeArray.get());
 
     if (FAILED(result))
-        return false;
+        return refreshRate;
+
+    DXGI_ADAPTER_DESC adapterDesc;
+    result = pDXGIAdapter->GetDesc(&adapterDesc);
+    if (FAILED(result))
+        return refreshRate;
 
     for (UINT modeIdx = 0; modeIdx < modeCnt; ++modeIdx)
     {
         if (rDXGIModeArray[modeIdx].Width == renderWindow.m_screenWidth &&
             rDXGIModeArray[modeIdx].Height == renderWindow.m_screenHeight)
         {
-            pRefreshRate->m_den = rDXGIModeArray[modeIdx].RefreshRate.Denominator;
-            pRefreshRate->m_num = rDXGIModeArray[modeIdx].RefreshRate.Numerator;
+            refreshRate.m_den = rDXGIModeArray[modeIdx].RefreshRate.Denominator;
+            refreshRate.m_num = rDXGIModeArray[modeIdx].RefreshRate.Numerator;
         }
     }
-    
-    DXGI_ADAPTER_DESC adapterDesc;
-    result = pDXGIAdapter->GetDesc(&adapterDesc);
-    if (FAILED(result))
-        return false;
 
-    return true;
+    return refreshRate;
 }
 
 Renderer InitializeRenderer(const RenderWindow& renderWindow)
@@ -88,17 +93,11 @@ Renderer InitializeRenderer(const RenderWindow& renderWindow)
     swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     // Set the refresh rate of the back buffer.
-    RefreshRate refreshRate;
-    if (renderWindow.m_verticalSync && GetRefreshRate(renderWindow, &refreshRate))
-    {
-        swapChainDesc.BufferDesc.RefreshRate.Numerator = refreshRate.m_num;
-        swapChainDesc.BufferDesc.RefreshRate.Denominator = refreshRate.m_den;
-    }
-    else
-    {
-        swapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
-        swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
-    }
+    RefreshRate refreshRate = renderWindow.m_verticalSync ?
+            GetRefreshRate(renderWindow) : RefreshRate();
+
+    swapChainDesc.BufferDesc.RefreshRate.Numerator = refreshRate.m_num;
+    swapChainDesc.BufferDesc.RefreshRate.Denominator = refreshRate.m_den;
 
     // Set the usage of the back buffer.
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -123,7 +122,6 @@ Renderer InitializeRenderer(const RenderWindow& renderWindow)
     swapChainDesc.Flags = 0;
 
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_0 };
-
 
     // Create the swap chain, Direct3D device, and Direct3D device context.
     result = D3D11CreateDeviceAndSwapChain(
